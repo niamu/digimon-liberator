@@ -1,0 +1,9 @@
+.cpcache/
+.nrepl-port
+resources/bg_card.png
+resources/bg_card_02.png
+resources/logo_header.png
+resources/mv_en.jpg
+.DS_Store
+resources/episode/
+resources/index.html
