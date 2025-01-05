@@ -127,48 +127,58 @@
                         nil
                         (int dest-x-offset)
                         (int dest-y-offset))))
-        (assoc page :page/image unscrambled-image)))))
+        (assoc page :page/image (if scramble-values
+                                  unscrambled-image
+                                  image))))))
 
 (defn parse-scramble
   [{:issue/keys [param] :as issue} {:page/keys [number]}]
-  (-> (util/http-get (str domain "/digimon_liberator/api/diazepam_hai.php")
-                     {:query-params {:mode 1
-                                     :file (format "%04d.xml" number)
-                                     :reqtype 0
-                                     :param param}})
-      (xml/parse-str)
-      zip/xml-zip
-      (zip-xml/xml-> :Page :Scramble zip/node)
-      first
-      :content
-      string/join
-      (string/split #",")
-      (as-> #__ numbers
-        (mapv parse-long numbers))))
+  (let [xml-zip (-> (util/http-get (str domain "/digimon_liberator/api/diazepam_hai.php")
+                                   {:query-params {:mode 1
+                                                   :file (format "%04d.xml" number)
+                                                   :reqtype 0
+                                                   :param param}})
+                    (xml/parse-str)
+                    zip/xml-zip)]
+    (when (not= (-> xml-zip
+                    (zip-xml/xml-> :Page :Part :Kind)
+                    ffirst
+                    :attrs
+                    :scramble) "0")
+      (-> xml-zip
+          (zip-xml/xml-> :Page :Scramble zip/node)
+          first
+          :content
+          string/join
+          (string/split #",")
+          (as-> #__ numbers
+            (mapv parse-long numbers))))))
 
 (defn parse-comic
   [{:issue/keys [param scramble-dimensions] :as issue}]
   (let [page-data (parse-pages issue)
         total-pages (count page-data)
         pages (pmap (fn [{:page/keys [number width height] :as page}]
-                      (->> (assoc page
-                                  :page/scramble
-                                  {:scramble/dimensions
-                                   {:dimension/width
-                                    (* (quot (/ width
-                                                (get scramble-dimensions
-                                                     :scramble/width))
-                                             8)
-                                       8)
-                                    :dimension/height
-                                    (* (quot (/ height
-                                                (get scramble-dimensions
-                                                     :scramble/height))
-                                             8)
-                                       8)}
-                                   :scramble/values (parse-scramble issue
-                                                                    page)})
-                           (parse-image issue)))
+                      (let [scramble-values (parse-scramble issue page)]
+                        (->> (assoc page
+                                    :page/scramble
+                                    {:scramble/dimensions
+                                     {:dimension/width
+                                      (when scramble-values
+                                        (* (quot (/ width
+                                                    (get scramble-dimensions
+                                                         :scramble/width))
+                                                 8)
+                                           8))
+                                      :dimension/height
+                                      (when scramble-values
+                                        (* (quot (/ height
+                                                    (get scramble-dimensions
+                                                         :scramble/height))
+                                                 8)
+                                           8))}
+                                     :scramble/values scramble-values})
+                             (parse-image issue))))
                     page-data)]
     (doseq [{:page/keys [number image]} pages]
       (let [f (io/file (str "resources/episode/"
@@ -190,7 +200,8 @@
                        (select/id "chapters")
                        (select/and (select/tag "li")
                                    (select/class "chapterListBox"))
-                       (select/tag "a")))
+                       (select/and (select/tag "a")
+                                   (select/attr "href" some?))))
        (map (fn [el]
               (let [issue-name (some-> (select/select
                                         (select/descendant
@@ -273,6 +284,7 @@
 
 (defn -main
   [& args]
-  (->> (issues)
-       (map (comp render-comic! parse-comic))
-       render-index!))
+  (let [all-issues (issues)]
+    (do (doseq [issue all-issues]
+          ((comp render-comic! parse-comic) issue))
+        (render-index! all-issues))))
