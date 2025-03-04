@@ -243,7 +243,8 @@
   (spit (io/file (str "resources/episode/"
                       (:issue/name issue)
                       "/index.html"))
-        (page/html5 {:lang "en"}
+        (page/html5
+            {:lang "en"}
           [:head
            [:meta {:charset "utf-8"}]
            [:title (format "Digimon Liberator - %s"
@@ -254,15 +255,18 @@
           [:body
            [:h1 "Digimon Liberator"]
            [:h2 (:issue/name issue)]
-           (for [{:page/keys [number]} pages]
-             [:image {:loading "lazy"
-                      :src (format "./images/%d.jpg" number)}])]))
+           (for [{:page/keys [number image]} pages]
+             [:img {:loading "lazy"
+                    :src (format "./images/%d.jpg" number)
+                    :width (.getWidth image)
+                    :height (.getHeight image)}])]))
   issue)
 
 (defn render-index!
   [issues]
   (spit (io/file (str "resources/index.html"))
-        (page/html5 {:lang "en"}
+        (page/html5
+            {:lang "en"}
           [:head
            [:meta {:charset "utf-8"}]
            [:title "Digimon Liberator"]
